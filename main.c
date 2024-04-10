@@ -27,14 +27,12 @@ static void freeJobs(job_t **jobs, int nJobs) {
 
 bool loadMatrix(job_t ***jobs, int *nJobs) {
     const char *filename = SRC_FILE;
-
     int cols = 0;
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
         perror("Error opening file");
         return false;
     }
-
     char line[256];
     if (fgets(line, sizeof(line), file) != NULL) {
         char *token = strtok(line, " ");
@@ -42,14 +40,14 @@ bool loadMatrix(job_t ***jobs, int *nJobs) {
         token = strtok(NULL, " ");
         cols = atoi(token);
     }
-
-    if (cols && nJobs) {
+    const bool ok = (cols && nJobs);
+    if (ok) {
         *jobs = (job_t **)calloc(*nJobs, sizeof(job_t *));
         for (int i = 0; i < *nJobs; ++i) {
             (*jobs)[i] = (job_t *)malloc(sizeof(job_t));
             (*jobs)[i]->jobId = i;
             (*jobs)[i]->task = (task_t *)malloc(cols * sizeof(task_t));
-
+            printf("Job %d -", (*jobs)[i]->jobId);
             if (fgets(line, sizeof(line), file) != NULL) {
                 const char *token = strtok(line, " ");
                 for (int j = 0; j < cols; ++j) {
@@ -57,21 +55,14 @@ bool loadMatrix(job_t ***jobs, int *nJobs) {
                     token = strtok(NULL, " ");
                     (*jobs)[i]->task[j].time = atoi(token);
                     token = strtok(NULL, " ");
+                    printf(" %d %d", (*jobs)[i]->task[j].mach, (*jobs)[i]->task[j].time);
                 }
+                printf("\n");
             }
-        }
-
-        for (int i = 0; i < *nJobs; ++i) {
-            printf("Job %d -", (*jobs)[i]->jobId);
-            for (int j = 0; j < cols; ++j) {
-                printf(" %d %d", (*jobs)[i]->task[j].mach, (*jobs)[i]->task[j].time);
-            }
-            printf("\n");
         }
     }
     fclose(file);
-
-    return true;
+    return ok;
 }
 
 int main() {
