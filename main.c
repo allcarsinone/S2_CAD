@@ -1,104 +1,184 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
+#include <unistd.h>
 #include <stdbool.h>
 
-#define SRC_FILE "ggOR06.txt"
+#define PARALLEL_VERSION 1
 
-enum {
-    IDX_JOB,
-    IDX_MAQ,
-    IDX_TIM
-};
+#define SRC_FILE "ggOR03.txt"
 
-static void DUMPMATRIX(int jobs[32][32][32], int nJobs, int nTasks)
+typedef struct {
+    int mach;
+    int time;
+} task_t;
+
+typedef struct {
+    task_t *tasks;
+    unsigned nTasks;
+    pthread_mutex_t mutex;
+    unsigned *out;
+} job_t;
+
+typedef struct {
+    job_t **jobs;
+    unsigned nJobs;
+    unsigned nMaqs;
+} ctx_t;
+
+static void DUMPMATRIX(ctx_t *ctx)
 {
-    for (int i = 0; i < nJobs; ++i) {
-        for (int j = 0; j < nTasks; ++j)
-            printf(" %2d %2d", jobs[i][j][IDX_MAQ], jobs[i][j][IDX_TIM]);
+    for (unsigned i = 0; i < ctx->nJobs; ++i) {
+        for (unsigned j = 0; j < ctx->nMaqs; ++j)
+            printf(" %2d %2d", ctx->jobs[i]->tasks[j].mach, ctx->jobs[i]->tasks[j].time);
         printf("\n");
     }
     printf("\n");
 }
 
-static void DUMPRESULT(int out[32][32], int nJobs, int nTasks)
+static void DUMPRESULT(ctx_t *ctx)
 {
-    for (int i = 0; i < nJobs; ++i) {
-        for (int j = 0; j < nTasks; ++j)
-            printf(" %3d", out[i][j]);
+    unsigned acum = 0;
+    for (unsigned i = 0; i < ctx->nJobs; ++i) {
+        for (unsigned j = 0; j < ctx->nMaqs; ++j) {
+            printf(" %3d", acum);
+            acum += ctx->jobs[i]->out[j];
+        }
         printf("\n");
     }
     printf("\n");
 }
 
-static bool loadMatrix(int jobs[32][32][32], int *nJobs, int *nTasks) {
+static bool loadMatrix(ctx_t *ctx)
+{
     const char *filename = SRC_FILE;
+
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
         perror("Error opening file");
         return false;
     }
+
     char line[256];
     if (fgets(line, sizeof(line), file) != NULL) {
         char *token = strtok(line, " ");
-        *nJobs = atoi(token);
+        ctx->nJobs = atoi(token);
         token = strtok(NULL, " ");
-        *nTasks = atoi(token);
+        ctx->nMaqs = atoi(token);
     }
-    const bool ok = (*nTasks && *nJobs);
-    if (ok) {
-        for (int i = 0; i < *nJobs; ++i) {
-            //printf("Job %d -", (*jobs)[i]->jobId);
+
+    if (ctx->nMaqs && ctx->nJobs) {
+        ctx->jobs = (job_t **)malloc(ctx->nJobs * sizeof(job_t *));
+        for (unsigned i = 0; i < ctx->nJobs; ++i) {
+            (ctx->jobs)[i] = (job_t *)malloc(sizeof(job_t));
+            (ctx->jobs)[i]->tasks = (task_t *)malloc(ctx->nMaqs * sizeof(task_t));
             if (fgets(line, sizeof(line), file) != NULL) {
                 const char *token = strtok(line, " ");
-                for (int j = 0; j < *nTasks; ++j) {
-                    jobs[i][j][IDX_JOB] = i; // Job
-                    jobs[i][j][IDX_MAQ] = atoi(token);
+                for (unsigned j = 0; j < ctx->nMaqs; ++j) {
+                    (ctx->jobs)[i]->tasks[j].mach = atoi(token);
                     token = strtok(NULL, " ");
-                    jobs[i][j][IDX_TIM] = atoi(token); // Time
+                    (ctx->jobs)[i]->tasks[j].time = atoi(token);
+                    (ctx->jobs)[i]->out = malloc(ctx->nMaqs * sizeof(unsigned));
                     token = strtok(NULL, " ");
                 }
             }
+            ctx->jobs[i]->nTasks = ctx->nMaqs;
+            pthread_mutex_init( &ctx->jobs[i]->mutex, NULL);
         }
     }
     fclose(file);
-    return ok;
+    return true;
 }
 
-static void runTask(int *startTime, int job, int maq, int time)
+static void freeMatrix(ctx_t *ctx)
 {
-    printf("Running Job %d on Machine %d during %d\n", job, maq, time);
-    *startTime += time;
+    for (unsigned i = 0; i < ctx->nJobs; ++i) {
+        if(ctx->jobs && ctx->jobs[i]) {
+            free(ctx->jobs[i]->tasks);
+            free(ctx->jobs[i]);
+        }
+    }
+    free(ctx->jobs);
 }
 
-static void jobShopAlgorithm(int jobs[32][32][32], int out[32][32], int nJobs, int nTasks)
+static void execute_task(int mach, int time) {
+    printf("Executing operation on machine %d for %d seconds\n", mach, time);
+    //sleep(time);
+}
+
+/***************************************************************************
+ * Algorithm code starts here
+ ***************************************************************************/
+
+#if PARALLEL_VERSION
+
+static void* job_worker(void* arg) {
+
+    job_t* job = *(job_t**) arg;
+    if(!job)
+        return NULL;
+
+    for (unsigned i = 0; i < job->nTasks; i++) {
+
+        const unsigned mach = job->tasks[i].mach;
+        const unsigned time = job->tasks[i].time;
+        pthread_mutex_lock(&job->mutex);
+
+        // TODO: Implement conditions to prevent the right sequence and no machine jobs overlapping
+
+        job->out[mach] = time;
+        execute_task(mach, time);
+
+        printf("Processing thread %ld - ", pthread_self());
+
+        pthread_mutex_unlock(&job->mutex);
+    }
+    pthread_exit(NULL);
+}
+
+#else
+static void job_worker(ctx_t *ctx)
 {
-    int startTime = 0;
-    for (int i = 0; i < nJobs; ++i) {
-        for (int j = 0; j < nTasks; ++j) {
-            out[i][j] = startTime;
-            runTask(&startTime, i, jobs[i][j][IDX_MAQ], jobs[i][j][IDX_TIM]);
+    unsigned startTime = 0;
+    for (unsigned i = 0; i < ctx->nJobs; ++i) {
+        for (unsigned j = 0; j < ctx->nMaqs; ++j) {
+            ctx->jobs[i]->out[j] = ctx->jobs[i]->tasks[j].time;
+            execute_task(ctx->jobs[i]->tasks[j].mach, ctx->jobs[i]->tasks[j].time);
+            startTime += ctx->jobs[i]->tasks[j].time;
         }
         printf("\n");
     }
     printf("Duration Time %d\n\n", startTime);
 }
+#endif
 
-int main() {
-    int jobs[32][32][32];
-    int nJobs = 0, nTasks = 0;
-    if (!loadMatrix(jobs, &nJobs, &nTasks)) {
-        printf("Failed to load matrix.\n");
-        return 1;
+int main()
+{
+    ctx_t ctx = {};
+
+    loadMatrix(&ctx);
+    DUMPMATRIX(&ctx);
+
+#if PARALEL_VERSION
+    pthread_t *threads = malloc (ctx.nJobs * sizeof(pthread_t));
+    for (unsigned i = 0; i < ctx.nJobs; i++) {
+        pthread_create(&threads[i], NULL, job_worker, &ctx.jobs[i]);
     }
+    for (unsigned i = 0; i < ctx.nJobs; i++)
+        pthread_join(threads[i], NULL);
 
-    DUMPMATRIX(jobs, nJobs, nTasks);
+    for (unsigned i = 0; i < ctx.nJobs; i++)
+        for (unsigned j = 0; j < ctx.nMaqs; j++)
+            printf(">>>>>>>>>>>>>>>>>>>>>> Count: %u\n", ctx.jobs[i]->out[j]);
 
-    /* JobShop algorythm */
-    int out[32][32];
-    jobShopAlgorithm(jobs, out, nJobs, nTasks);
+    free(threads);
+#else
+    job_worker(&ctx);
+#endif
 
-    DUMPRESULT(out, nJobs, nTasks);
+    DUMPRESULT(&ctx);
+    freeMatrix(&ctx);
 
     return 0;
 }
