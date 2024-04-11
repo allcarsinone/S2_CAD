@@ -5,16 +5,6 @@
 
 #define SRC_FILE "ggOR06.txt"
 
-typedef struct task {
-    int mach;
-    int time;
-} task_t;
-
-typedef struct job {
-    int jobId;
-    task_t *task;
-} job_t;
-
 enum {
     IDX_JOB,
     IDX_MAQ,
@@ -35,7 +25,7 @@ static void DUMPRESULT(int out[32][32], int nJobs, int nTasks)
 {
     for (int i = 0; i < nJobs; ++i) {
         for (int j = 0; j < nTasks; ++j)
-            printf(" %2d", out[i][j]);
+            printf(" %3d", out[i][j]);
         printf("\n");
     }
     printf("\n");
