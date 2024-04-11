@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#define SRC_FILE "ggOR03.txt"
+#define SRC_FILE "ggOR06.txt"
 
 typedef struct task {
     int mach;
@@ -15,16 +15,23 @@ typedef struct job {
     task_t *task;
 } job_t;
 
-static void DUMPMATRIX(job_t ***jobs, int nJobs, int nTasks)
+enum {
+    IDX_JOB,
+    IDX_MAQ,
+    IDX_TIM
+};
+
+static void DUMPMATRIX(int jobs[32][32][32], int nJobs, int nTasks)
 {
     for (int i = 0; i < nJobs; ++i) {
         for (int j = 0; j < nTasks; ++j)
-            printf(" %2d %2d", (*jobs)[i]->task[j].mach, (*jobs)[i]->task[j].time);
+            printf(" %2d %2d", jobs[i][j][IDX_MAQ], jobs[i][j][IDX_TIM]);
         printf("\n");
     }
+    printf("\n");
 }
 
-static void DUMPRESULT(int out[128][128], int nJobs, int nTasks)
+static void DUMPRESULT(int out[32][32], int nJobs, int nTasks)
 {
     for (int i = 0; i < nJobs; ++i) {
         for (int j = 0; j < nTasks; ++j)
@@ -34,17 +41,7 @@ static void DUMPRESULT(int out[128][128], int nJobs, int nTasks)
     printf("\n");
 }
 
-static void freeJobs(job_t **jobs, int nJobs) {
-    if(!jobs)
-        return;
-    for (int i = 0; i < nJobs; ++i) {
-        free(jobs[i]->task);
-        free(jobs[i]);
-    }
-    free(jobs);
-}
-
-static bool loadMatrix(job_t ***jobs, int *nJobs, int *nTasks) {
+static bool loadMatrix(int jobs[32][32][32], int *nJobs, int *nTasks) {
     const char *filename = SRC_FILE;
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
@@ -60,18 +57,15 @@ static bool loadMatrix(job_t ***jobs, int *nJobs, int *nTasks) {
     }
     const bool ok = (*nTasks && *nJobs);
     if (ok) {
-        *jobs = (job_t **)calloc(*nJobs, sizeof(job_t *));
         for (int i = 0; i < *nJobs; ++i) {
-            (*jobs)[i] = (job_t *)malloc(sizeof(job_t));
-            (*jobs)[i]->jobId = i;
-            (*jobs)[i]->task = (task_t *)malloc(*nTasks * sizeof(task_t));
             //printf("Job %d -", (*jobs)[i]->jobId);
             if (fgets(line, sizeof(line), file) != NULL) {
                 const char *token = strtok(line, " ");
                 for (int j = 0; j < *nTasks; ++j) {
-                    (*jobs)[i]->task[j].mach = atoi(token);
+                    jobs[i][j][IDX_JOB] = i; // Job
+                    jobs[i][j][IDX_MAQ] = atoi(token);
                     token = strtok(NULL, " ");
-                    (*jobs)[i]->task[j].time = atoi(token);
+                    jobs[i][j][IDX_TIM] = atoi(token); // Time
                     token = strtok(NULL, " ");
                 }
             }
@@ -81,19 +75,19 @@ static bool loadMatrix(job_t ***jobs, int *nJobs, int *nTasks) {
     return ok;
 }
 
-static void runTask(int *startTime, int job, task_t *task)
+static void runTask(int *startTime, int job, int maq, int time)
 {
-    printf("Running Job %d on Machine %d\n", job, task->mach);
-    *startTime += task->time;
+    printf("Running Job %d on Machine %d during %d\n", job, maq, time);
+    *startTime += time;
 }
 
-static void jobShopAlgorithm(job_t ***jobs, int out[128][128], int nJobs, int nTasks)
+static void jobShopAlgorithm(int jobs[32][32][32], int out[32][32], int nJobs, int nTasks)
 {
     int startTime = 0;
     for (int i = 0; i < nJobs; ++i) {
         for (int j = 0; j < nTasks; ++j) {
             out[i][j] = startTime;
-            runTask(&startTime, i, &(*jobs)[i]->task[j]);
+            runTask(&startTime, i, jobs[i][j][IDX_MAQ], jobs[i][j][IDX_TIM]);
         }
         printf("\n");
     }
@@ -101,21 +95,20 @@ static void jobShopAlgorithm(job_t ***jobs, int out[128][128], int nJobs, int nT
 }
 
 int main() {
-    job_t **jobs = NULL;
+    int jobs[32][32][32];
     int nJobs = 0, nTasks = 0;
-    if (!loadMatrix(&jobs, &nJobs, &nTasks)) {
+    if (!loadMatrix(jobs, &nJobs, &nTasks)) {
         printf("Failed to load matrix.\n");
         return 1;
     }
 
-    DUMPMATRIX(&jobs, nJobs, nTasks);
+    DUMPMATRIX(jobs, nJobs, nTasks);
 
     /* JobShop algorythm */
-    int out[128][128];
-    jobShopAlgorithm(&jobs, out, nJobs, nTasks);
+    int out[32][32];
+    jobShopAlgorithm(jobs, out, nJobs, nTasks);
 
     DUMPRESULT(out, nJobs, nTasks);
 
-    freeJobs(jobs, nJobs);
     return 0;
 }
