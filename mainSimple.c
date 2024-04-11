@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <time.h>
+
+#define getClock() ((double)clock() / CLOCKS_PER_SEC)
 
 #define NUM_JOBS 3
 #define NUM_MACHS 3
@@ -86,6 +89,8 @@ int main() {
                              {{{1, 4}, {2, 3}, {0, 1}}}
     };
 
+    double tempoinicio = getClock();
+
 #if PARALLEL_VERSION
     pthread_t threads[NUM_JOBS];
 
@@ -96,6 +101,9 @@ int main() {
 #else
     job_worker(jobs);
 #endif
+
+    double tempofim = getClock();
+    printf("Tempo de execução (s): %.6f\n", tempofim - tempoinicio);
 
     DUMPRESULT();
 

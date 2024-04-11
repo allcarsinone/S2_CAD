@@ -4,6 +4,9 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <time.h>
+
+#define getClock() ((double)clock() / CLOCKS_PER_SEC)
 
 #define PARALLEL_VERSION 1
 
@@ -160,7 +163,9 @@ int main()
     loadMatrix(&ctx);
     DUMPMATRIX(&ctx);
 
-#if PARALEL_VERSION
+    double tempoinicio = getClock();
+
+#if PARALLEL_VERSION
     pthread_t *threads = malloc (ctx.nJobs * sizeof(pthread_t));
     for (unsigned i = 0; i < ctx.nJobs; i++) {
         pthread_create(&threads[i], NULL, job_worker, &ctx.jobs[i]);
@@ -176,6 +181,9 @@ int main()
 #else
     job_worker(&ctx);
 #endif
+
+    double tempofim = getClock();
+    printf("Tempo de execução (s): %.6f\n", tempofim - tempoinicio);
 
     DUMPRESULT(&ctx);
     freeMatrix(&ctx);
