@@ -12,9 +12,13 @@
 
 #define SRC_FILE "ggOR03.txt"
 
+#define MAX_MACHINES 10
+bool machine_available[MAX_MACHINES] = { true };
+
 typedef struct {
     int mach;
     int time;
+    bool completed;
 } task_t;
 
 typedef struct {
@@ -82,6 +86,7 @@ static bool loadMatrix(ctx_t *ctx)
                     (ctx->jobs)[i]->tasks[j].mach = atoi(token);
                     token = strtok(NULL, " ");
                     (ctx->jobs)[i]->tasks[j].time = atoi(token);
+                    (ctx->jobs)[i]->tasks[j].completed = false;
                     (ctx->jobs)[i]->out = malloc(ctx->nMaqs * sizeof(unsigned));
                     token = strtok(NULL, " ");
                 }
@@ -128,10 +133,24 @@ static void* job_worker(void* arg) {
         const unsigned time = job->tasks[i].time;
         pthread_mutex_lock(&job->mutex);
 
-        // TODO: Implement conditions to prevent the right sequence and no machine jobs overlapping
+        // Conditions to prevent the right sequence and no machine jobs overlapping
+        while(job->out[mach] > 0 && machine_available[mach] == true && job->tasks[i-1].completed == true) {
+            pthread_mutex_unlock(&job->mutex);
+            usleep(100);
+            pthread_mutex_lock(&job->mutex);
+        }
 
         job->out[mach] = time;
+        machine_available[mach] = false;
+
+        pthread_mutex_unlock(&job->mutex);
+
         execute_task(mach, time);
+
+        pthread_mutex_lock(&job->mutex);
+        
+        job->tasks[i].completed = true;
+        machine_available[mach] = true;
 
         printf("Processing thread %ld - ", pthread_self());
 
