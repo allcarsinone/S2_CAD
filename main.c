@@ -134,7 +134,7 @@ static void* job_worker(void* arg) {
         pthread_mutex_lock(&job->mutex);
 
         // Conditions to prevent the right sequence and no machine jobs overlapping
-        while(job->out[mach] > 0 && machine_available[mach] == true && job->tasks[i-1].completed == true) {
+        while(job->out[mach] > 0 && machine_available[mach] == true && (i == 0 || job->tasks[i-1].completed)) {
             pthread_mutex_unlock(&job->mutex);
             usleep(100);
             pthread_mutex_lock(&job->mutex);
