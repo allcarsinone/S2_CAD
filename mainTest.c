@@ -25,6 +25,7 @@ typedef struct {
     task_t *tasks;
     unsigned nTasks;
     pthread_mutex_t mutex;
+    pthread_cond_t cond;
     unsigned *out;
 } job_t;
 
@@ -131,30 +132,28 @@ static void* job_worker(void* arg) {
 
         const unsigned mach = job->tasks[i].mach;
         const unsigned time = job->tasks[i].time;
+        
         pthread_mutex_lock(&job->mutex);
-
         // Conditions to prevent the right sequence and no machine jobs overlapping
         while(job->out[mach] > 0 && machine_available[mach] == true && (i == 0 || job->tasks[i-1].completed)) {
-            pthread_mutex_unlock(&job->mutex);
-            usleep(100);
-            pthread_mutex_lock(&job->mutex);
+           pthread_cond_wait(&job->cond, &job->mutex);
         }
 
         job->out[mach] = time;
         machine_available[mach] = false;
-
         pthread_mutex_unlock(&job->mutex);
 
         execute_task(mach, time);
+        printf("Processing thread %ld - ", pthread_self());
 
         pthread_mutex_lock(&job->mutex);
-        
+
         job->tasks[i].completed = true;
         machine_available[mach] = true;
-
-        // printf("Processing thread %ld - ", pthread_self());
-
+        // Says to other threads that the machine is available
+        pthread_cond_signal(&job->cond);
         pthread_mutex_unlock(&job->mutex);
+
     }
     pthread_exit(NULL);
 }
