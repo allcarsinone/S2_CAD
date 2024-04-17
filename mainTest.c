@@ -93,6 +93,7 @@ static bool loadMatrix(ctx_t *ctx)
                 }
             }
             ctx->jobs[i]->nTasks = ctx->nMaqs;
+            pthread_cond_init( &ctx->jobs[i]->cond, NULL);
             pthread_mutex_init( &ctx->jobs[i]->mutex, NULL);
         }
     }
