@@ -15,6 +15,9 @@
 #define MAX_MACHINES 10
 bool machine_available[MAX_MACHINES] = { true };
 
+pthread_mutex_t* mutex;
+pthread_cond_t* cond;
+
 typedef struct {
     int mach;
     int time;
@@ -24,8 +27,6 @@ typedef struct {
 typedef struct {
     task_t *tasks;
     unsigned nTasks;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
     unsigned *out;
 } job_t;
 
@@ -93,8 +94,8 @@ static bool loadMatrix(ctx_t *ctx)
                 }
             }
             ctx->jobs[i]->nTasks = ctx->nMaqs;
-            pthread_cond_init( &ctx->jobs[i]->cond, NULL);
-            pthread_mutex_init( &ctx->jobs[i]->mutex, NULL);
+            pthread_cond_init( cond, NULL);
+            pthread_mutex_init( mutex, NULL);
         }
     }
     fclose(file);
@@ -136,23 +137,23 @@ static void* job_worker(void* arg) {
         
         // Conditions to prevent the right sequence and no machine jobs overlapping
         while(job->out[mach] != 0 && (i == 0 || job->tasks[i-1].completed)) {
-           pthread_cond_wait(&job->cond, &job->mutex);
+           pthread_cond_wait(cond, mutex);
         }
 
-        pthread_mutex_lock(&job->mutex);
+        pthread_mutex_lock(mutex);
         job->out[mach] = time;
         machine_available[mach] = false;
-        pthread_mutex_unlock(&job->mutex);
+        pthread_mutex_unlock(mutex);
 
         execute_task(mach, time);
         printf("Processing thread %ld - ", pthread_self());
 
-        pthread_mutex_lock(&job->mutex);
+        pthread_mutex_lock(mutex);
         job->tasks[i].completed = true;
         machine_available[mach] = true;
         // Says to other threads that the machine is available
-        pthread_cond_signal(&job->cond);
-        pthread_mutex_unlock(&job->mutex);
+        pthread_cond_signal(cond);
+        pthread_mutex_unlock(mutex);
 
     }
     pthread_exit(NULL);
