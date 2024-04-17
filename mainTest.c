@@ -133,12 +133,12 @@ static void* job_worker(void* arg) {
         const unsigned mach = job->tasks[i].mach;
         const unsigned time = job->tasks[i].time;
         
-        pthread_mutex_lock(&job->mutex);
         // Conditions to prevent the right sequence and no machine jobs overlapping
-        while(job->out[mach] > 0 && machine_available[mach] == true && (i == 0 || job->tasks[i-1].completed)) {
+        while(job->out[mach] != 0 && (i == 0 || job->tasks[i-1].completed)) {
            pthread_cond_wait(&job->cond, &job->mutex);
         }
 
+        pthread_mutex_lock(&job->mutex);
         job->out[mach] = time;
         machine_available[mach] = false;
         pthread_mutex_unlock(&job->mutex);
@@ -147,7 +147,6 @@ static void* job_worker(void* arg) {
         printf("Processing thread %ld - ", pthread_self());
 
         pthread_mutex_lock(&job->mutex);
-
         job->tasks[i].completed = true;
         machine_available[mach] = true;
         // Says to other threads that the machine is available
